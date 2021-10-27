@@ -1,0 +1,47 @@
+name: Run Terraform to provision AWS instance with a Load Balancer
+
+on:
+  workflow_dispatch:
+    inputs:
+      provision_aws:
+        description: "Do you want to run AWS provision process? (yes/no)"
+        required: true
+        default: 'yes'
+        
+defaults:
+  run:
+    working-directory: devops/infra/aws
+    
+env:
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+jobs:
+  Terraform-Script:
+    runs-on: ubuntu-latest
+    name: Run Terraform script
+    if: ${{ github.event.inputs.provision_aws == 'yes' }}
+
+    steps:
+      - name: Checkout files
+        uses: actions/checkout@v2
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v1
+
+      - name: Terraform init
+        id: init
+        run: terraform init
+
+      - name: Terraform Validate
+        id: validate
+        run: terraform validate -no-color
+
+      - name: Terraform plan
+        id: plan
+        run: terraform plan -no-color
+        continue-on-error: false
+ 
+      - name: Terraform apply
+        id: apply
+        run: terraform apply -auto-approve

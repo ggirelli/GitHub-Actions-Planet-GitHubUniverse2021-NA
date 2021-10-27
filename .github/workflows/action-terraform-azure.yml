@@ -1,0 +1,49 @@
+name: Run Terraform to provision Azure
+
+on:
+  workflow_dispatch:
+    inputs:
+      provision_azure:
+        description: "Do you want to run Azure provision process? (yes/no)"
+        required: true
+        default: 'yes'
+        
+defaults:
+  run:
+    working-directory: devops/infra/azure
+    
+env:
+  ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+  ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+  ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+
+jobs:
+  Terraform-Script:
+    runs-on: ubuntu-latest
+    name: Run Terraform script
+    if: ${{ github.event.inputs.provision_azure == 'yes' }}
+
+    steps:
+      - name: Checkout files
+        uses: actions/checkout@v2
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v1
+
+      - name: Terraform init
+        id: init
+        run: terraform init
+
+      - name: Terraform Validate
+        id: validate
+        run: terraform validate -no-color
+
+      - name: Terraform plan
+        id: plan
+        run: terraform plan -no-color
+        continue-on-error: false
+ 
+      - name: Terraform apply
+        id: apply
+        run: terraform apply -auto-approve

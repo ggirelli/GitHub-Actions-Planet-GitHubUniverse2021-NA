@@ -1,0 +1,50 @@
+name: Discover existing Project Boards
+on:
+  workflow_dispatch:
+    inputs:
+      ownerProject:
+        description: "Do you want to discover Project Boards?"
+        default: "yes"
+        required: true
+
+        
+permissions:
+  actions: none
+  checks: none
+  contents: none
+  deployments: none
+  issues: none
+  packages: none
+  pull-requests: none
+  repository-projects: read
+  security-events: none
+  statuses: none
+        
+jobs:
+  discover-different-projects:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Discover different Project Boards
+        uses: actions/github-script@v4.1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          previews: 'inertia' # required for Projects API
+          script: |       
+            try {
+              listProjects = await github.projects.listForRepo({
+                owner: context.payload.organization.login ,
+                repo: context.payload.repository.name ,
+                per_page: 100
+              })
+             
+            } catch(err) {
+                throw err 
+            }
+            
+            var count = 0
+            console.log("| Project Count | Project Name | Unique Project ID | Creator |")
+            listProjects.data.forEach(function(project) {
+              console.log("| Project " + count + " | " + project.name + " | " + project.id + " | " + project.creator.login + " |")
+              ++ count
+            })
+            

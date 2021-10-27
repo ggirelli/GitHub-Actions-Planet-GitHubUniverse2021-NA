@@ -1,0 +1,56 @@
+name: Create an Azure webapp environment
+
+on:
+  workflow_dispatch:
+    inputs:
+      provision_azure:
+        description: "Do you want to create an Azure web app? (yes/no)"
+        required: true
+        default: 'yes'
+
+env:
+  AZURE_RESOURCE_GROUP: GitHubUniverse2021-AppDevDemo-group
+  AZURE_APP_PLAN: actions-bryant-deployment
+  AZURE_LOCATION: '"Central US"'
+  #################################################
+  ### USER PROVIDED VALUES ARE REQUIRED BELOW   ###
+  #################################################
+  #################################################
+  ### REPLACE USERNAME WITH GH USERNAME         ###
+  AZURE_WEBAPP_NAME: sample-nodejs-app-bryant
+  #################################################
+
+jobs:
+  setup-up-azure-resources:
+    runs-on: ubuntu-latest
+
+    if: ${{ github.event.inputs.provision_azure == 'yes' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Azure login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Create Azure resource group
+        if: success()
+        run: |
+          az group create --location ${{env.AZURE_LOCATION}} --name ${{env.AZURE_RESOURCE_GROUP}} --subscription ${{secrets.ARM_SUBSCRIPTION_ID}}
+
+      - name: Create Azure app service plan
+        if: success()
+        run: |
+          az appservice plan create --resource-group ${{env.AZURE_RESOURCE_GROUP}} --name ${{env.AZURE_APP_PLAN}} --is-linux --sku F1 --subscription ${{secrets.ARM_SUBSCRIPTION_ID }}
+
+      - name: Create webapp resource
+        if: success()
+        run: |
+          az webapp create --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --plan ${{ env.AZURE_APP_PLAN }} --name ${{ env.AZURE_WEBAPP_NAME }}  --deployment-container-image-name nginx --subscription ${{secrets.ARM_SUBSCRIPTION_ID}}
+
+      - name: Configure webapp to use GitHub Packages
+        if: success()
+        run: |
+          az webapp config container set --docker-custom-image-name nginx --docker-registry-server-password ${{secrets.GITHUB_TOKEN}} --docker-registry-server-url https://ghcr.io --docker-registry-server-user ${{github.actor}} --name ${{ env.AZURE_WEBAPP_NAME }} --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --subscription ${{secrets.ARM_SUBSCRIPTION_ID}}

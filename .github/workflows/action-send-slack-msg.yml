@@ -1,0 +1,24 @@
+name: Send Slack message
+
+on:
+  workflow_dispatch:
+      inputs:
+         greeting:
+            description: "Please type in your greeting!"
+            required: true
+            default: ''
+
+jobs:
+   Hello-GitHub-Actions:
+      runs-on: ubuntu-latest
+      name: Post to a Slack channel
+
+      steps:
+        - name: Hello, GitHub Actions planet
+          id: slack
+          uses: slackapi/slack-github-action@v1.14.0
+          with:
+            channel-id: 'github-universe'
+            slack-message: 'Posting from GitHub Actions planet! Here is my greeting: ${{ github.event.inputs.greeting }}'
+          env:
+            SLACK_BOT_TOKEN: ${{ secrets.SLACK_TOKEN }}

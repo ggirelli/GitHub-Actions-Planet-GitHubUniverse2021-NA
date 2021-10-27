@@ -1,0 +1,156 @@
+name: Clone an existing Project Board
+on:
+  workflow_dispatch:
+    inputs:
+      projectID:
+        description: "Specify the unique Project ID of project that will be copied from"
+        default: "13603730"
+        required: true
+      descNewProject:
+        description: "Provide type your GitHub name"
+        default: "@USERNAME"
+        required: true
+
+permissions:
+  actions: none
+  checks: none
+  contents: none
+  deployments: none
+  issues: none
+  packages: none
+  pull-requests: none
+  repository-projects: write
+  security-events: none
+  statuses: none
+        
+env:
+  PROJECT_ID: ${{ github.event.inputs.projectID }}
+        
+jobs:
+  newProject:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test
+        uses: actions/github-script@v4.1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          previews: 'inertia' # required for Projects API
+          script: |
+            console.log("======= Starting to get the data from an existing Project Board with ID: " + ${{ env.PROJECT_ID }} + " ==============")
+            
+            // RETRIEVE the Columns from the existing Project Board:
+            try {
+              listColumns = await github.projects.listColumns({
+                project_id: ${{ env.PROJECT_ID }}
+              })
+            } catch(err) {
+                throw err 
+            }
+            
+            console.log("Discovered a total of " + listColumns.length + " in the Project Board with ID: " + ${{ env.PROJECT_ID }})
+            
+            // REPRESENTING the Column IDs associated with existing Project Board - used to get all cards in the column:
+            listColumnIDs = []
+            // REPRESENTING the title in each column associated with existing Project Board:
+            listColumnNames = []
+            
+            // ITERATING through the columns to extract IDs and titled:
+            listColumns.data.forEach(function(column) {
+              listColumnIDs.push(column.id)
+              listColumnNames.push(column.name)
+            })
+            
+            // REPRSENTING the list of unfiltered Card data directly pulled from GitHub API:
+            listAllCardsUnformatted = []
+            
+            // ITERATING through the Columns to extract the Card data:
+            try {
+              for(var i=0; i < listColumnIDs.length; ++ i) {
+                listCards4Column = await github.projects.listCards({
+                  column_id: listColumnIDs[i]
+                })
+                listAllCardsUnformatted.push(listCards4Column.data)
+              }
+              
+            } catch(err) {
+                throw err 
+            }
+            
+            // REPRESENTING the list of all cards with only Note copied from each Card:
+            listAllCards = []
+            
+            // ITERATING to create a new nested list representing all cards per column:
+            listAllCardsUnformatted.forEach(function(cardsPerColumn) {
+              listCardsPerColumn = []
+              
+              // ITERATING through all cards in this column:
+              cardsPerColumn.forEach(function(card) {
+                listCardsPerColumn.push(card.note ? card.note : card.content_id)
+              })
+              
+              // STORING the reversed card orders since it is ordered in an opposite way:
+              listAllCards.push(listCardsPerColumn.reverse())
+            })
+           
+            console.log("What is inside the existing Project Board => " + JSON.stringify(listAllCards))
+            
+            // REPRESENTING the length of columns:
+            nListColumns = listAllCards.length;
+            
+            console.log("\n========= Let's create a new Project! ==================\n")
+
+            // REPRESENTING a new Project Board:
+            var projectObj="";
+            
+            // CREATE a new Project Board based on input:
+            try {
+              projectObj = await github.projects.createForRepo({
+                owner: context.payload.organization.login,
+                repo: context.payload.repository.name,
+                name: "${{ github.event.inputs.descNewProject }} Daily survival plan at GitHub Actions planet"
+              })
+            } catch(err) {
+                throw err 
+            }
+
+            console.log("New Project was created with Project ID: " + projectObj.data.id)
+            console.log("Next, we will now create cards and columns")
+            
+            // ITERATING to create Cards for a new Project Board:
+            for(var iColumn=0; iColumn < nListColumns; ++ iColumn) {
+              try {
+                  // CREATE a new column attached to our new project ID:
+                  var columnObj = await github.projects.createColumn({
+                    name: listColumnNames[iColumn],
+                    project_id: projectObj.data.id
+                  })
+
+                  // REPRESENTING the total number of Cards for this column:
+                  nCardsPerColumn = listAllCards[iColumn].length
+                  
+                  // REPRESENTING the content of Cards in this column:
+                  listOrderedCardsPerColumn = listAllCards[iColumn]
+                                    
+                  console.log("Cards in this column: " + JSON.stringify(listOrderedCardsPerColumn))
+                  
+                  // ITERATING to create Cards for this column:
+                  for(var iCard = 0; iCard < nCardsPerColumn; ++ iCard) {
+                    try {
+                      var cardObj = await github.projects.createCard({
+                        column_id: columnObj.data.id,
+                        note: listOrderedCardsPerColumn[iCard]
+                      })
+                      
+                    } catch(err) {
+                        console.log("Error in creating card: " + err);
+                        throw err;
+                    }
+                  }
+              } catch(err) {
+                  console.log("Error in general: " + err);
+                  throw err 
+               }
+            }
+            
+            console.log("All done!")
+        

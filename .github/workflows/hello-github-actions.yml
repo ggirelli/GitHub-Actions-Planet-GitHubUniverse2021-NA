@@ -1,0 +1,20 @@
+name: Hello from GitHub Actions Planet
+
+on:
+  workflow_dispatch:
+      inputs:
+         myName:
+            description: "Please type in your name"
+            required: true
+            default: ''
+
+jobs:
+   Hello-GitHub-Actions:
+      runs-on: ubuntu-latest
+      name: Just saying "hi"
+
+      steps:
+        - name: Hello, GitHub Actions planet
+          run: |
+             echo "Thank you for warm welcoming! My name is ${{ github.event.inputs.myName }}"
+             echo "I will enjoy my time in this wonderful GitHub Actions planet!"

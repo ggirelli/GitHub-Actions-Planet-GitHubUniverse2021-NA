@@ -1,0 +1,136 @@
+name: Run NodeJS CI/CD process
+
+on:
+  workflow_dispatch:
+    inputs:
+      test-nodejs:
+        description: "Do you want to run NodeJS test? (yes/no)"
+        required: true
+        default: 'yes'
+env:
+  DOCKER_IMAGE_NAME: my-custom-nodeapp
+  DOCKER_IMAGE_VERSION: ${{ github.sha }}
+  AZURE_WEBAPP_NAME: sample-nodejs-app-bryant
+  IMAGE_REGISTRY_URL: ghcr.io
+  AZURE_RESOURCE_GROUP: GitHubUniverse2021-AppDevDemo-group
+  
+defaults:
+  run:
+    working-directory: devops/appdev/nodejs
+
+jobs:
+  NodeJS-Test:
+    runs-on: ubuntu-latest
+    name: Run NodeJS Test
+    if: ${{ github.event.inputs.test-nodejs == 'yes' }}
+
+    steps:
+      - name: Checkout files
+        uses: actions/checkout@v2
+
+      - name: Setup NodeJS
+        uses: actions/setup-node@v2
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install NPM dependencies
+        run: npm install
+
+      - name: Run npm test
+        run: npm test
+         
+      - name: Print path
+        run: pwd
+         
+      - name: Upload the test result in JSON to Artifact
+        uses: actions/upload-artifact@main
+        with:
+          name: Test Result
+          path: ${{ github.workspace }}/devops/appdev/nodejs/output.txt
+          
+      - name: Upload the test coverage result to Artifact
+        uses: actions/upload-artifact@main
+        with:
+          name: Test Coverage Result
+          path: ${{ github.workspace }}/devops/appdev/nodejs/coverage
+          
+      - name: Save NPM output
+        id: id-npm-test
+     #   run: echo "::set-output name=result-node::$(cat output.txt)"
+        run: echo "::set-output name=result-node::$(cat output.txt | jq '.numFailedTests')"
+        
+      - name: Print the output from last
+        run: echo ${{ steps.id-npm-test.outputs.result-node }}
+        
+  Build-Image:
+    needs: NodeJS-Test
+    runs-on: ubuntu-latest
+    name: Build image
+    if: ${{ needs.NodeJS-Test.steps.id-npm-test.outputs.result-node == 0 }}
+    
+    steps:
+      - name: Checkout files
+        uses: actions/checkout@v2
+        
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.TOKEN_PACKAGE }}
+          
+      - name: Build and push
+        id: docker_build
+        uses: docker/build-push-action@v2
+        with:
+          context: devops/appdev/nodejs
+          push: true
+          tags: ghcr.io/githubuniverseworkshops/nodejs/${{ env.DOCKER_IMAGE_NAME }}:${{ env.DOCKER_IMAGE_VERSION }}
+          
+  Deploy-Azure:
+    runs-on: ubuntu-latest
+    needs: Build-Image
+    name: Deploy app container to Azure
+    steps:
+      - name: "Login via Azure CLI"
+        uses: azure/login@v1
+        with: 
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          
+      - name: Login to GHCR registry
+        uses: azure/docker-login@v1
+        with: 
+          login-server: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.TOKEN_PACKAGE }}
+          
+      - name: Set Web App ACR authentication
+        uses: Azure/appservice-settings@v1
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          app-settings-json: |
+           [
+             {
+                 "name": "DOCKER_REGISTRY_SERVER_PASSWORD",
+                 "value": "${{ secrets.TOKEN_PACKAGE }}",
+                 "slotSetting": false
+             },
+             {
+                 "name": "DOCKER_REGISTRY_SERVER_URL",
+                 "value": "https://ghcr.io",
+                 "slotSetting": false
+             },
+             {
+                 "name": "DOCKER_REGISTRY_SERVER_USERNAME",
+                 "value": "${{ github.actor }}",
+                 "slotSetting": false
+             }
+           ]
+          
+      - name: Deploy to Azure Web app container
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          images: ${{ env.IMAGE_REGISTRY_URL }}/githubuniverseworkshops/nodejs/${{ env.DOCKER_IMAGE_NAME }}:${{ env.DOCKER_IMAGE_VERSION }}
+          
+ 

@@ -4,7 +4,7 @@ on:
     inputs:
       projectID:
         description: "Specify the unique Project ID of project that will be copied from"
-        default: "13603730"
+        default: "13621042"
         required: true
       descNewProject:
         description: "Provide type your GitHub name"
